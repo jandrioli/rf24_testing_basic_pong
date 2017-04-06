@@ -1,0 +1,55 @@
+#include <SPI.h>
+#include <RF24.h>
+#include "printf.h"
+
+#define LED 13
+#define TMP A0
+#define RF_CS 9
+#define RF_CSN 10
+
+RF24 radio(RF_CS, RF_CSN);
+const uint64_t pipes[2] = { 0xe7e7e7e7e7LL, 0xc2c2c2c2c2LL };
+
+void setup() {
+  pinMode(LED, OUTPUT);
+  pinMode(TMP, INPUT);
+  digitalWrite(LED, HIGH);
+  delay(3000);
+  Serial.begin(115200);
+  printf_begin();
+  radio.begin();
+  radio.openWritingPipe(pipes[1]);    // note that our pipes are the same above, but that
+  radio.openReadingPipe(1, pipes[0]); // they are flipped between rx and tx sides.
+  radio.startListening();
+  radio.printDetails();
+  digitalWrite(LED, LOW);
+}
+ 
+void loop() {
+  int temp = 0.0;
+  temp = analogRead(TMP) * 00.48828125; // if no thermometer is connected, what do we read?
+  
+  if (radio.available()) {
+    uint8_t rx_data[32];  // we'll receive a 32 byte packet
+    
+    bool done = false;
+    while (!done) {
+      done = radio.read( &rx_data, sizeof(rx_data) );
+      printf("Got payload @ %lu...\r\n", millis());
+      printf("First Value: %i...\r\n", rx_data[0] );
+      
+      //TODO: add code that checks for precise data in the rvd package
+      //TODO: acceptable commands: wake up, tx log, sleep nightingale
+    }
+    
+    // first value was probably 254 or 666 or 66 depending on Joao's code evolution... replace that value with current temperature
+    rx_data[0] = temp;
+    radio.stopListening();
+    radio.write( &rx_data, sizeof(rx_data) );
+    radio.startListening();
+ 
+  }
+  digitalWrite(LED, !digitalRead(LED));
+}
+ 
+// https://gist.github.com/bryanthompson/ef4ecf24ad36410f077b 
